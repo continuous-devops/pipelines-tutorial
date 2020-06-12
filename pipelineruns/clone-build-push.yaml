@@ -2,7 +2,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: extract-build-verify-push
+  name: extract-build-verify-push-tag
 spec:
   workspaces:
     - name: source
@@ -95,6 +95,16 @@ spec:
       volumeMounts:
         - name: varlibcontainers
           mountPath: /var/lib/containers
+    - name: tag-image
+      image: quay.io/openshift/origin-cli:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
+        GITSHA=$( cat /tekton/results/SHA.txt )
+        echo "Image Name: $IMAGENAME"
+        echo "Git SHA: $GITSHA"
+
+        oc tag cptekton/$IMAGENAME:$GITSHA cptekton/$IMAGENAME:latest
   volumes:
     - name: varlibcontainers
       emptyDir: {}
@@ -155,7 +165,7 @@ spec:
     - name: build-push
       runAfter: ["clone-repo"] # Wait until the clone is done
       taskRef:
-        name: extract-build-verify-push
+        name: extract-build-verify-push-tag
       workspaces:
         - name: source
           workspace: shared-data

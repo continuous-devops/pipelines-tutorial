@@ -36,3 +36,16 @@ spec:
     requests:
       storage: 1
 ```
+
+## Pipelinerun Examples
+
+### clone-build-push.yaml
+
+* ClusterTask: Clones a repository
+* Task
+    * Step 1: Inspects the source directory for the image and looks at the Dockerfile
+    * Step 2: Builds the container
+    * Step 3: Pushes to the internal registry with the git sha of the commit of the repository
+    * Step 4: Tag container latest
+* Workspaces - shared-task-storage --> shared-data --> pipelines-task-pvc
+  
