@@ -1,0 +1,189 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: extract-build-verify-push
+spec:
+  workspaces:
+    - name: source
+      description: The image building will be done onto the volume backing this workspace
+  params:
+    - name: contextDir
+      description: Path to dockerfile
+      type: string
+      default: .
+    - name: dockerFile
+      description: Dockerfile name
+      type: string
+      default: "Dockerfile"
+    - name: sslVerify
+      type: string
+      description: tls verify
+      default: "false"
+    - name: imageName
+      type: string
+      description: Image name
+      default: ""
+  results:
+    - name: IMAGENAME.txt
+      description: Image name
+    - name: SHA.txt
+      description: Git SHA
+    - name: UUID.txt
+      description: Unique identifier
+  steps:
+    - name: extract-container-info
+      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -e -o pipefail
+
+        ls -la .
+
+        # set image name
+        IMAGENAME=$(params.imageName)
+        if [ "$IMAGENAME" == "" ]; then
+          IMAGENAME=$( cat $(params.contextDir)/$(params.dockerFile) | grep -m1 "name=" | cut -d '"' -f 2 )
+        fi
+        echo "$IMAGENAME" | tee /tekton/results/IMAGENAME.txt
+
+        # get git sha
+        git rev-parse --verify --short HEAD | tee /tekton/results/SHA.txt
+
+    - name: build-image
+      image: quay.io/buildah/stable
+      workingDir: $(workspaces.source.path)/$(params.contextDir)
+      script: |
+        #!/usr/bin/env bash
+        set -e -o pipefail
+
+        # unique id
+        uuidgen | cut -d '-' -f 1 | tee /tekton/results/UUID.txt
+        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
+        GITSHA=$( cat /tekton/results/SHA.txt )
+        echo "Image Name: $IMAGENAME"
+        echo "Git SHA: $GITSHA"
+
+        buildah bud --tls-verify=$(params.sslVerify) \
+        --layers \
+        -f $(params.dockerFile) \
+        -t image-registry.openshift-image-registry.svc:5000/cptekton/$IMAGENAME:$GITSHA .
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+    - name: push-image
+      image: quay.io/buildah/stable
+      workingDir: $(workspaces.source.path)/$(params.contextDir)
+      script: |
+        #!/usr/bin/env bash
+        set -e -o pipefail
+
+        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
+        GITSHA=$( cat /tekton/results/SHA.txt )
+        echo "Image Name: $IMAGENAME"
+        echo "Git SHA: $GITSHA"
+
+        # push image with with git SHA
+        buildah push --tls-verify=$(params.sslVerify) \
+        image-registry.openshift-image-registry.svc:5000/cptekton/$IMAGENAME:$GITSHA \
+        docker://image-registry.openshift-image-registry.svc:5000/cptekton/$IMAGENAME:$GITSHA
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+  volumes:
+    - name: varlibcontainers
+      emptyDir: {}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: clone-build-push
+spec:
+  description: |
+    Use clustertask git-clone, build image, push image
+  params:
+    - name: repo-url
+      type: string
+      description: The git repository URL to clone from.
+    - name: branch-name
+      description: The git branch to clone.
+      type: string
+      default: "master"
+    - name: context-dir
+      description: The relative path to the Dockerfile
+      type: string
+      default: "."
+    - name: docker-file
+      description: The name of the Dockerfile
+      type: string
+      default: "Dockerfile"
+    - name: tls-verify
+      type: string
+      description: tls verify
+      default: "false"
+    - name: image-name
+      type: string
+      description: Image name
+      default: ""
+  workspaces:
+    - name: shared-data
+      description: |
+        This workspace will receive the cloned git repo and be passed
+        to the next Task for verifying, building, and pushing files.
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      workspaces:
+        - name: output
+          workspace: shared-data
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.branch-name)
+        - name: sslVerify
+          value: $(params.tls-verify)
+        - name: deleteExisting
+          value: "true"
+    - name: build-push
+      runAfter: ["clone-repo"] # Wait until the clone is done
+      taskRef:
+        name: extract-build-verify-push
+      workspaces:
+        - name: source
+          workspace: shared-data
+      params:
+        - name: contextDir
+          value: $(params.context-dir)
+        - name: dockerFile
+          value: $(params.docker-file)
+        - name: sslVerify
+          value: $(params.tls-verify)
+        - name: imageName
+          value: $(params.image-name)
+---
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: clone-build-push-
+spec:
+  pipelineRef:
+    name: clone-build-push
+  params:
+    - name: repo-url
+      value: https://github.com/CentOS-PaaS-SIG/contra-env-infra.git
+    - name: context-dir
+      value: container-tools
+    - name: image-name
+      value: container-tools
+  workspaces:
+    - name: shared-data
+      persistentVolumeClaim:
+        claimName: pipelines-task-pvc

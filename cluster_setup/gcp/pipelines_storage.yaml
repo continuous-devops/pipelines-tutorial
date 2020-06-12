@@ -1,12 +1,3 @@
-# pipelines-tutorial
-A repository that walks through tektoncd pipelines examples
-
-## Cluster setup
-
-### Storage
-
-#### cluster_setup/gcp
-```
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -35,4 +26,3 @@ spec:
   resources:
     requests:
       storage: 1
-```
