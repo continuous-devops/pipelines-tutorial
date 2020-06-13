@@ -68,7 +68,7 @@ spec:
         buildah bud --tls-verify=$(params.sslVerify) \
         --layers \
         -f $(params.dockerFile) \
-        -t image-registry.openshift-image-registry.svc:5000/cptekton/$IMAGENAME:$GITSHA .
+        -t image-registry.openshift-image-registry.svc:5000/cd-pipelines/$IMAGENAME:$GITSHA .
       securityContext:
         privileged: true
       volumeMounts:
@@ -88,8 +88,8 @@ spec:
 
         # push image with with git SHA
         buildah push --tls-verify=$(params.sslVerify) \
-        image-registry.openshift-image-registry.svc:5000/cptekton/$IMAGENAME:$GITSHA \
-        docker://image-registry.openshift-image-registry.svc:5000/cptekton/$IMAGENAME:$GITSHA
+        image-registry.openshift-image-registry.svc:5000/cd-pipelines/$IMAGENAME:$GITSHA \
+        docker://image-registry.openshift-image-registry.svc:5000/cd-pipelines/$IMAGENAME:$GITSHA
       securityContext:
         privileged: true
       volumeMounts:
@@ -104,7 +104,7 @@ spec:
         echo "Image Name: $IMAGENAME"
         echo "Git SHA: $GITSHA"
 
-        oc tag cptekton/$IMAGENAME:$GITSHA cptekton/$IMAGENAME:latest
+        oc tag cd-pipelines/$IMAGENAME:$GITSHA cd-pipelines/$IMAGENAME:latest
   volumes:
     - name: varlibcontainers
       emptyDir: {}
