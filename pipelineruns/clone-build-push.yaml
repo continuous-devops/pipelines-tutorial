@@ -20,10 +20,18 @@ spec:
       type: string
       description: tls verify
       default: "false"
+    - name: imageRegistry
+      type: string
+      description: Image registry to push images to
+      default: "image-registry.openshift-image-registry.svc:5000"
     - name: imageName
       type: string
       description: Image name
       default: ""
+    - name: nameSpace
+      type: string
+      description: Cluster namespace to use for pipelines
+      default: "cd-pipelines"
   results:
     - name: IMAGENAME.txt
       description: Image name
@@ -68,7 +76,7 @@ spec:
         buildah bud --tls-verify=$(params.sslVerify) \
         --layers \
         -f $(params.dockerFile) \
-        -t image-registry.openshift-image-registry.svc:5000/cd-pipelines/$IMAGENAME:$GITSHA .
+        -t $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA .
       securityContext:
         privileged: true
       volumeMounts:
@@ -88,8 +96,8 @@ spec:
 
         # push image with with git SHA
         buildah push --tls-verify=$(params.sslVerify) \
-        image-registry.openshift-image-registry.svc:5000/cd-pipelines/$IMAGENAME:$GITSHA \
-        docker://image-registry.openshift-image-registry.svc:5000/cd-pipelines/$IMAGENAME:$GITSHA
+        $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
+        docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
       securityContext:
         privileged: true
       volumeMounts:
@@ -104,7 +112,7 @@ spec:
         echo "Image Name: $IMAGENAME"
         echo "Git SHA: $GITSHA"
 
-        oc tag cd-pipelines/$IMAGENAME:$GITSHA cd-pipelines/$IMAGENAME:latest
+        oc tag $(params.nameSpace)/$IMAGENAME:$GITSHA $(params.nameSpace)/$IMAGENAME:latest
   volumes:
     - name: varlibcontainers
       emptyDir: {}
@@ -136,10 +144,18 @@ spec:
       type: string
       description: tls verify
       default: "false"
+    - name: image-registry
+      type: string
+      description: Image registry to push images to
+      default: "image-registry.openshift-image-registry.svc:5000"
     - name: image-name
       type: string
       description: Image name
       default: ""
+    - name: name-space
+      type: string
+      description: Cluster namespace to use for pipelines
+      default: "cd-pipelines"
   workspaces:
     - name: shared-data
       description: |
@@ -176,8 +192,12 @@ spec:
           value: $(params.docker-file)
         - name: sslVerify
           value: $(params.tls-verify)
+        - name: imageRegistry
+          value: $(params.image-registry)
         - name: imageName
           value: $(params.image-name)
+        - name: nameSpace
+          value: $(params.name-space)
 ---
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
@@ -188,11 +208,15 @@ spec:
     name: clone-build-push
   params:
     - name: repo-url
-      value: https://github.com/CentOS-PaaS-SIG/contra-env-infra.git
+      value: "https://github.com/CentOS-PaaS-SIG/contra-env-infra.git"
     - name: context-dir
-      value: container-tools
+      value: "container-tools"
+    - name: image-registry
+      value: "image-registry.openshift-image-registry.svc:5000"
     - name: image-name
-      value: container-tools
+      value: "container-tools"
+    - name: name-space
+      value: "cd-pipelines"
   workspaces:
     - name: shared-data
       persistentVolumeClaim:
