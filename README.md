@@ -41,8 +41,8 @@ spec:
 
 ### clone-build-push.yaml
 
-* ClusterTask: Clones a repository
-* Task
+* ClusterTask: git-clone - Clones a repository
+* Task: extract-build-verify-push-tag
     * Step 1: Inspects the source directory for the image and looks at the Dockerfile
     * Step 2: Builds the container
     * Step 3: Pushes to the internal registry with the git sha of the commit of the repository
