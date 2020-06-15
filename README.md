@@ -12,7 +12,6 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: pipelines-shared-sc
-  namespace: cptekton
   annotations:
     storageclass.kubernetes.io/is-default-class: 'true'
 provisioner: kubernetes.io/gce-pd
@@ -27,7 +26,6 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: pipelines-task-pvc
-  namespace: cptekton
 spec:
   accessModes:
     - ReadWriteOnce
