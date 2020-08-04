@@ -127,7 +127,7 @@ spec:
       volumeMounts:
         - name: varlibcontainers
           mountPath: /var/lib/containers
-    - name: tag-push-image-to-remote-reg
+    - name: push-image-to-remote-reg
       env:
         - name: REGISTRY_AUTH_FILE
           value: /workspace/.docker/config.json
