@@ -44,6 +44,10 @@ spec:
     * Step 1: Inspects the source directory for the image and looks at the Dockerfile
     * Step 2: Builds the container
     * Step 3: Pushes to the internal registry with the git sha of the commit of the repository
-    * Step 4: Tag container latest
+    * Step 4: Tag container latest with oc
+    * Step 5: Pull local image
+              Push to remote registry/organization:GITSHA
+              Push to remote registry/organization:latest
 * Workspaces - shared-task-storage --> shared-data --> pipelines-task-pvc
-  
+
+_Requirement: A secret with the name regcred is required to push to remote registry_  

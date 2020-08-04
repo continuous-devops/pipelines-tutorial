@@ -32,6 +32,14 @@ spec:
       type: string
       description: Cluster namespace to use for pipelines
       default: "cd-pipelines"
+    - name: remoteRegistry
+      type: string
+      description: Remote registry to push image to
+      default: "quay.io"
+    - name: remoteOrg
+      type: string
+      description: Remote registry organization or user registry namespace
+      default: "arilivigni"
   results:
     - name: IMAGENAME.txt
       description: Image name
@@ -73,6 +81,7 @@ spec:
         echo "Image Name: $IMAGENAME"
         echo "Git SHA: $GITSHA"
 
+        # build image
         buildah bud --tls-verify=$(params.sslVerify) \
         --layers \
         -f $(params.dockerFile) \
@@ -113,9 +122,66 @@ spec:
         echo "Git SHA: $GITSHA"
 
         oc tag $(params.nameSpace)/$IMAGENAME:$GITSHA $(params.nameSpace)/$IMAGENAME:latest
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+    - name: tag-push-image-to-remote-reg
+      env:
+        - name: REGISTRY_AUTH_FILE
+          value: /workspace/.docker/config.json
+      image: quay.io/buildah/stable
+      workingDir: $(workspaces.source.path)/$(params.contextDir)
+      script: |
+        #!/usr/bin/env bash
+        set -e -o pipefail
+
+        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
+        GITSHA=$( cat /tekton/results/SHA.txt )
+
+        echo "Image Name: $IMAGENAME"
+        echo "Git SHA: $GITSHA"
+
+        # pull down the local image we built and tagged
+        buildah pull --tls-verify=$(params.sslVerify) \
+        docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
+
+        # push to remote registry and organization with GITSHA tag
+        echo ""
+        echo "Push $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA to \
+        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA"
+        echo ""
+
+        buildah push --tls-verify=$(params.sslVerify) \
+        $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
+        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
+
+        # push to remote registry and organization with latest tag
+        echo ""
+        echo "Push $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA to \
+        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest"
+        echo ""
+
+        buildah push --tls-verify=$(params.sslVerify) \
+        $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
+        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+        - name: docker-secret
+          mountPath: /workspace/.docker
   volumes:
     - name: varlibcontainers
       emptyDir: {}
+    - name: docker-secret
+      secret:
+        secretName: regcred
+        items:
+          - key: .dockerconfigjson
+            path: config.json
 ---
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
@@ -156,11 +222,20 @@ spec:
       type: string
       description: Cluster namespace to use for pipelines
       default: "cd-pipelines"
+    - name: remote-registry
+      type: string
+      description: Remote registry to push image to
+      default: "quay.io"
+    - name: remote-org
+      type: string
+      description: Remote registry organization or user registry namespace
+      default: "arilivigni"
   workspaces:
     - name: shared-data
       description: |
         This workspace will receive the cloned git repo and be passed
         to the next Task for verifying, building, and pushing files.
+
   tasks:
     - name: clone-repo
       taskRef:
@@ -198,6 +273,10 @@ spec:
           value: $(params.image-name)
         - name: nameSpace
           value: $(params.name-space)
+        - name: remoteRegistry
+          value: $(params.remote-registry)
+        - name: remoteOrg
+          value: $(params.remote-org)
 ---
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
@@ -217,6 +296,10 @@ spec:
       value: "container-tools"
     - name: name-space
       value: "cd-pipelines"
+    - name: remote-registry
+      value: "quay.io"
+    - name: remote-org
+      value: "arilivigni"
   workspaces:
     - name: shared-data
       persistentVolumeClaim:
