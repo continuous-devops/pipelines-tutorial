@@ -2,7 +2,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: extract-build-verify-push-tag
+  name: extract-check-build-verify-push
 spec:
   workspaces:
     - name: source
@@ -40,13 +40,6 @@ spec:
       type: string
       description: Remote registry organization or user registry namespace
       default: "arilivigni"
-  results:
-    - name: IMAGENAME.txt
-      description: Image name
-    - name: SHA.txt
-      description: Git SHA
-    - name: UUID.txt
-      description: Unique identifier
   steps:
     - name: extract-container-info
       image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:latest
@@ -55,18 +48,31 @@ spec:
         #!/bin/sh
         set -e -o pipefail
 
-        ls -la .
-
         # set image name
         IMAGENAME=$(params.imageName)
         if [ "$IMAGENAME" == "" ]; then
           IMAGENAME=$( cat $(params.contextDir)/$(params.dockerFile) | grep -m1 "name=" | cut -d '"' -f 2 )
         fi
-        echo "$IMAGENAME" | tee /tekton/results/IMAGENAME.txt
+        echo "$IMAGENAME" | tee $(workspaces.source.path)/IMAGENAME.txt
 
         # get git sha
-        git rev-parse --verify --short HEAD | tee /tekton/results/SHA.txt
+        git rev-parse --verify --short HEAD | tee $(workspaces.source.path)/SHA.txt
+    - name: check-image-tag
+      image: quay.io/openshift/origin-cli:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
+        GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
 
+        oc get is/$IMAGENAME | grep -v NAME | awk '{print $3}' | sed 's/,*stable*,*//; s/,*latest*,*//' | tee > $(workspaces.source.path)/ISTAG.txt
+        ISTAG=$( cat $(workspaces.source.path)/ISTAG.txt )
+        echo "Image Name: $IMAGENAME"
+        echo "Git SHA: $GITSHA"
+        echo "Image Stream SHA: $ISTAG"
+        if [ "$GITSHA" == "$ISTAG" ]; then
+          echo "The git sha and the local image stream tag match - $GITSHA = $ISTAG"
+          touch $(workspaces.source.path)/MATCH
+        fi
     - name: build-image
       image: quay.io/buildah/stable
       workingDir: $(workspaces.source.path)/$(params.contextDir)
@@ -74,18 +80,29 @@ spec:
         #!/usr/bin/env bash
         set -e -o pipefail
 
-        # unique id
-        uuidgen | cut -d '-' -f 1 | tee /tekton/results/UUID.txt
-        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
-        GITSHA=$( cat /tekton/results/SHA.txt )
-        echo "Image Name: $IMAGENAME"
-        echo "Git SHA: $GITSHA"
+        # check if local image stream tag already exists
+        MATCHFILE="$(workspaces.source.path)/MATCH"
+        if [ ! -f "$MATCHFILE" ]; then
+          echo "Local image registry does not have the image stream tag...continuing"
 
-        # build image
-        buildah bud --tls-verify=$(params.sslVerify) \
-        --layers \
-        -f $(params.dockerFile) \
-        -t $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA .
+          # unique id
+          uuidgen | cut -d '-' -f 1 | tee $(workspaces.source.path)/UUID.txt
+          IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
+          GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+          ISTAG=$( cat $(workspaces.source.path)/ISTAG.txt )
+          echo "Image Name: $IMAGENAME"
+          echo "Git SHA: $GITSHA"
+          echo "Image Stream SHA: $ISTAG"
+
+          # build image
+          buildah bud --tls-verify=$(params.sslVerify) \
+          --layers \
+          -f $(params.dockerFile) \
+          -t $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA .
+        else
+          echo "Local image registry contains the image stream tag...nothing to do"
+        fi
+
       securityContext:
         privileged: true
       volumeMounts:
@@ -98,15 +115,24 @@ spec:
         #!/usr/bin/env bash
         set -e -o pipefail
 
-        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
-        GITSHA=$( cat /tekton/results/SHA.txt )
-        echo "Image Name: $IMAGENAME"
-        echo "Git SHA: $GITSHA"
+        # check if local image stream tag already exists
+        MATCHFILE="$(workspaces.source.path)/MATCH"
+        if [ ! -f "$MATCHFILE" ]; then
 
-        # push image with with git SHA
-        buildah push --tls-verify=$(params.sslVerify) \
-        $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
-        docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
+          IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
+          GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+          ISTAG=$( cat $(workspaces.source.path)/ISTAG.txt )
+          echo "Image Name: $IMAGENAME"
+          echo "Git SHA: $GITSHA"
+          echo "Image Stream SHA: $ISTAG"
+
+          # push image with with git SHA
+          buildah push --tls-verify=$(params.sslVerify) \
+          $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
+          docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
+        else
+          echo "Local image registry contains the image stream tag...nothing to do"
+        fi
       securityContext:
         privileged: true
       volumeMounts:
@@ -116,12 +142,21 @@ spec:
       image: quay.io/openshift/origin-cli:latest
       workingDir: $(workspaces.source.path)
       script: |
-        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
-        GITSHA=$( cat /tekton/results/SHA.txt )
-        echo "Image Name: $IMAGENAME"
-        echo "Git SHA: $GITSHA"
+        # check if local image stream tag already exists
+        MATCHFILE="$(workspaces.source.path)/MATCH"
+        if [ ! -f "$MATCHFILE" ]; then
 
-        oc tag $(params.nameSpace)/$IMAGENAME:$GITSHA $(params.nameSpace)/$IMAGENAME:latest
+          IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
+          GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+          ISTAG=$( cat $(workspaces.source.path)/ISTAG.txt )
+          echo "Image Name: $IMAGENAME"
+          echo "Git SHA: $GITSHA"
+          echo "Image Stream SHA: $ISTAG"
+
+          oc tag $(params.nameSpace)/$IMAGENAME:$GITSHA $(params.nameSpace)/$IMAGENAME:latest
+        else
+          echo "Local image registry contains the image stream tag...nothing to do"
+        fi
       securityContext:
         privileged: true
       volumeMounts:
@@ -137,35 +172,43 @@ spec:
         #!/usr/bin/env bash
         set -e -o pipefail
 
-        IMAGENAME=$( cat /tekton/results/IMAGENAME.txt )
-        GITSHA=$( cat /tekton/results/SHA.txt )
+        # check if local image stream tag already exists
+        MATCHFILE="$(workspaces.source.path)/MATCH"
+        if [ ! -f "$MATCHFILE" ]; then
 
-        echo "Image Name: $IMAGENAME"
-        echo "Git SHA: $GITSHA"
+          IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
+          GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+          ISTAG=$( cat $(workspaces.source.path)/ISTAG.txt )
+          echo "Image Name: $IMAGENAME"
+          echo "Git SHA: $GITSHA"
+          echo "Image Stream SHA: $ISTAG"
 
-        # pull down the local image we built and tagged
-        buildah pull --tls-verify=$(params.sslVerify) \
-        docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
+          # pull down the local image we built and tagged
+          buildah pull --tls-verify=$(params.sslVerify) \
+          docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
 
-        # push to remote registry and organization with GITSHA tag
-        echo ""
-        echo "Push $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA to \
-        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA"
-        echo ""
+          # push to remote registry and organization with GITSHA tag
+          echo ""
+          echo "Push $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA to \
+          $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA"
+          echo ""
 
-        buildah push --tls-verify=$(params.sslVerify) \
-        $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
-        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
+          buildah push --tls-verify=$(params.sslVerify) \
+          $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
+          $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
 
-        # push to remote registry and organization with latest tag
-        echo ""
-        echo "Push $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA to \
-        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest"
-        echo ""
+          # push to remote registry and organization with latest tag
+          echo ""
+          echo "Push $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA to \
+          $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest"
+          echo ""
 
-        buildah push --tls-verify=$(params.sslVerify) \
-        $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
-        $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
+          buildah push --tls-verify=$(params.sslVerify) \
+          $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
+          $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
+        else
+          echo "Local image registry contains the image stream tag...nothing to do"
+        fi
       securityContext:
         privileged: true
       volumeMounts:
@@ -184,9 +227,27 @@ spec:
             path: config.json
 ---
 apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: get-shared-workspace-info
+spec:
+  workspaces:
+    - name: source
+      description: View files in the shared workspace used for the pipeline and underlying tasks
+  steps:
+    - name: cat-txt-files-workspace
+      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -e -o pipefail
+
+        ls $(workspaces.source.path)/*.txt | xargs -I{} cat {}
+---
+apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: clone-build-push
+  name: clone-check-build-push
 spec:
   description: |
     Use clustertask git-clone, build image, push image
@@ -221,21 +282,20 @@ spec:
     - name: name-space
       type: string
       description: Cluster namespace to use for pipelines
-      default: "cd-pipelines"
+      default: ""
     - name: remote-registry
       type: string
       description: Remote registry to push image to
-      default: "quay.io"
+      default: ""
     - name: remote-org
       type: string
       description: Remote registry organization or user registry namespace
-      default: "arilivigni"
+      default: ""
   workspaces:
     - name: shared-data
       description: |
         This workspace will receive the cloned git repo and be passed
         to the next Task for verifying, building, and pushing files.
-
   tasks:
     - name: clone-repo
       taskRef:
@@ -253,10 +313,10 @@ spec:
           value: $(params.tls-verify)
         - name: deleteExisting
           value: "true"
-    - name: build-push
-      runAfter: ["clone-repo"] # Wait until the clone is done
+    - name: check-build-push
+      runAfter: ["clone-repo"] # Wait until the clone-repo is complete
       taskRef:
-        name: extract-build-verify-push-tag
+        name: extract-check-build-verify-push
       workspaces:
         - name: source
           workspace: shared-data
@@ -277,6 +337,13 @@ spec:
           value: $(params.remote-registry)
         - name: remoteOrg
           value: $(params.remote-org)
+    - name: workspace-info
+      runAfter: ["check-build-push"] # Wait until check-build-push task is complete
+      taskRef:
+        name: get-shared-workspace-info
+      workspaces:
+        - name: source
+          workspace: shared-data
 ---
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
@@ -284,7 +351,7 @@ metadata:
   generateName: clone-build-push-
 spec:
   pipelineRef:
-    name: clone-build-push
+    name: clone-check-build-push
   params:
     - name: repo-url
       value: "https://github.com/CentOS-PaaS-SIG/contra-env-infra.git"

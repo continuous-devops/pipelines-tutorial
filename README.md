@@ -38,16 +38,35 @@ spec:
 ## Pipelinerun Examples
 
 ### clone-build-push.yaml
+```
+This pipeline uses tekton to clone a repository check git sha vs image stream tag 
+to see if it has already been built and pushed to local image stream and tagged.  
+It then pushes the image built to a remote repository.  There is a check to see
+files in the workspace.
+```
 
-* ClusterTask: git-clone - Clones a repository
-* Task: extract-build-verify-push-tag
-    * Step 1: Inspects the source directory for the image and looks at the Dockerfile
-    * Step 2: Builds the container
-    * Step 3: Pushes to the internal registry with the git sha of the commit of the repository
-    * Step 4: Tag container latest with oc
-    * Step 5: Pull local image
-              Push to remote registry/organization:GITSHA
-              Push to remote registry/organization:latest
+* Pipeline: ```clone-build-push```
+  * ClusterTask: git-clone - Clones a repository
+  * Task: ```extract-build-verify-push```
+    * Step 1: extract-container-info
+      * Inspects the source directory for the image and looks at the Dockerfile
+    * Step 2: ```check-image-tag```
+      * Check image stream tag in local registry
+    * Following steps are executed if the git sha and image stream tag don't exist
+      * Step 3: ```build-image``` 
+        * Builds the container
+      * Step 4: ```push-image```
+        * Pushes to the internal registry with the git sha of the commit of the repository
+      * Step 5: ```tag-image```
+        * Tag container in openshift image stream with latest tag
+      * Step 6: ```push-image-to-remote-reg```
+        * Pull local image of image stream in OpenShift
+        * Push to remote registry/organization:$GITSHA
+        * Push to remote registry/organization:latest
+  * Task: ```get-shared-workspace-info```
+    * Step 1: ```cat-txt-files-workspace```
+      * View files in the shared workspace used for the pipeline and underlying tasks
 * Workspaces - shared-task-storage --> shared-data --> pipelines-task-pvc
 
-_Requirement: A secret with the name regcred is required to push to remote registry_  
+__Requirement:__ _A secret with the name regcred is required to push to remote registry_
+__Note:__ _Can't use tekton condition since it doesn't support workspaces_  
