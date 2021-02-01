@@ -221,7 +221,7 @@ spec:
       emptyDir: {}
     - name: docker-secret
       secret:
-        secretName: regcred
+        secretName: regcreds
         items:
           - key: .dockerconfigjson
             path: config.json
@@ -344,30 +344,3 @@ spec:
       workspaces:
         - name: source
           workspace: shared-data
----
-apiVersion: tekton.dev/v1beta1
-kind: PipelineRun
-metadata:
-  generateName: clone-build-push-
-spec:
-  pipelineRef:
-    name: clone-check-build-push
-  params:
-    - name: repo-url
-      value: "https://github.com/CentOS-PaaS-SIG/contra-env-infra.git"
-    - name: context-dir
-      value: "container-tools"
-    - name: image-registry
-      value: "image-registry.openshift-image-registry.svc:5000"
-    - name: image-name
-      value: "container-tools"
-    - name: name-space
-      value: "cd-pipelines"
-    - name: remote-registry
-      value: "quay.io"
-    - name: remote-org
-      value: "arilivigni"
-  workspaces:
-    - name: shared-data
-      persistentVolumeClaim:
-        claimName: pipelines-task-pvc

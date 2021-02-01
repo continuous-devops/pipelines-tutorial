@@ -1,0 +1,213 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-push
+spec:
+  workspaces:
+  - name: source
+    description: The image building will be done onto the volume backing this workspace
+  params:
+  - name: revId
+    description: The git revision cloned 
+    type: string
+    default: "master"
+  - name: contextDir
+    description: Path to dockerfile
+    type: string
+    default: .
+  - name: dockerFile
+    description: Dockerfile name
+    type: string
+    default: "Dockerfile"
+  - name: sslVerify
+    type: string
+    description: tls verify
+    default: "false"
+  - name: imageRegistry
+    type: string
+    description: Image registry to push images to
+    default: "image-registry.openshift-image-registry.svc:5000"
+  - name: imageName
+    type: string
+    description: Image name
+    default: ""
+  - name: nameSpace
+    type: string
+    description: Cluster namespace to use for pipelines
+    default: "app-sre-cicd"
+  - name: remoteRegistry
+    type: string
+    description: Remote registry to push image to
+    default: "quay.io"
+  - name: remoteOrg
+    type: string
+    description: Remote registry organization or user registry namespace
+    default: "arilivigni"
+  steps:
+  - name: build-image
+    image: quay.io/buildah/stable
+    workingDir: $(workspaces.source.path)
+    script: |
+      #!/usr/bin/env bash
+      set -e -o pipefail
+
+      # set image name
+      IMAGENAME=$(params.imageName)
+      FULLSHA=$(params.revId)
+      if [ "$IMAGENAME" == "" ]; then
+        IMAGENAME=$( cat $(params.contextDir)/$(params.dockerFile) | grep -m1 "name=" | cut -d '"' -f 2 )
+      fi
+      echo "$IMAGENAME" | tee $(workspaces.source.path)/IMAGENAME.txt
+      echo "$FULLSHA" | cut -c1-7 | tee $(workspaces.source.path)/SHA.txt
+      GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+
+      echo "Image Name: $IMAGENAME"
+      echo "Git SHA: $GITSHA"
+
+      # build image
+      buildah bud --tls-verify=$(params.sslVerify) \
+      --layers \
+      -f $(params.contextDir)/$(params.dockerFile) \
+      -t $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA .
+    securityContext:
+      privileged: true
+    volumeMounts:
+      - name: varlibcontainers
+        mountPath: /var/lib/containers
+  - name: push-image
+    env:
+    - name: REGISTRY_AUTH_FILE
+      value: /workspace/.docker/config.json
+    image: quay.io/buildah/stable
+    workingDir: $(workspaces.source.path)/$(params.contextDir)
+    script: |
+      #!/usr/bin/env bash
+      set -e -o pipefail
+
+      IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
+      GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+      echo "Image Name: $IMAGENAME"
+      echo "Git SHA: $GITSHA"
+
+      # push image with with git SHA to git SHA tag
+      buildah push --tls-verify=$(params.sslVerify) \
+      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA \
+      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
+
+      # push image to latest tag
+      buildah push --tls-verify=$(params.sslVerify) \
+      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA \
+      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
+    securityContext:
+      privileged: true
+    volumeMounts:
+      - name: varlibcontainers
+        mountPath: /var/lib/containers
+      - name: docker-secret
+        mountPath: /workspace/.docker
+  volumes:
+  - name: varlibcontainers
+    emptyDir: {}
+  - name: docker-secret
+    secret:
+      secretName: regcreds
+      items:
+        - key: .dockerconfigjson
+          path: config.json
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: app-sre-build-push-pipeline
+spec:
+  description: |
+    Use clustertask git-clone, build image, push image
+  params:
+  - name: repo-url
+    type: string
+    description: The git repository URL to clone from.
+  - name: rev-id
+    description: The git revision
+    type: string
+    default: "master"
+  - name: context-dir
+    description: The relative path to the Dockerfile
+    type: string
+    default: "."
+  - name: docker-file
+    description: The name of the Dockerfile
+    type: string
+    default: "Dockerfile"
+  - name: tls-verify
+    type: string
+    description: tls verify
+    default: "false"
+  - name: image-registry
+    type: string
+    description: Image registry to push images to
+    default: "image-registry.openshift-image-registry.svc:5000"
+  - name: image-name
+    type: string
+    description: Image name
+    default: ""
+  - name: name-space
+    type: string
+    description: Cluster namespace to use for pipelines
+    default: ""
+  - name: remote-registry
+    type: string
+    description: Remote registry to push image to
+    default: ""
+  - name: remote-org
+    type: string
+    description: Remote registry organization or user registry namespace
+    default: ""
+  workspaces:
+  - name: shared-workspace
+    description: |
+      This workspace will receive the cloned git repo and be passed
+      to the next Task for verifying, building, and pushing files.
+  tasks:
+  - name: clone-repo
+    taskRef:
+      name: git-clone
+      kind: ClusterTask
+    workspaces:
+    - name: output
+      workspace: shared-workspace
+    params:
+    - name: url
+      value: $(params.repo-url)
+    - name: revision
+      value: $(params.rev-id)
+    - name: sslVerify
+      value: $(params.tls-verify)
+    - name: deleteExisting
+      value: "true"
+  - name: app-sre-build-push
+    runAfter: ["clone-repo"] # Wait until the clone-repo is complete
+    taskRef:
+      name: build-push
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+    params:
+    - name: revId
+      value: $(params.rev-id)
+    - name: contextDir
+      value: $(params.context-dir)
+    - name: dockerFile
+      value: $(params.docker-file)
+    - name: sslVerify
+      value: $(params.tls-verify)
+    - name: imageRegistry
+      value: $(params.image-registry)
+    - name: imageName
+      value: $(params.image-name)
+    - name: nameSpace
+      value: $(params.name-space)
+    - name: remoteRegistry
+      value: $(params.remote-registry)
+    - name: remoteOrg
+      value: $(params.remote-org)
