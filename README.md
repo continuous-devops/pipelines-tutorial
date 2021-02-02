@@ -122,10 +122,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: gp2
   resources:
     requests:
-      storage: 1
+      storage: 20Gi
 ```
 ### 02-app-sre-pipeline.yaml
 
@@ -176,8 +175,13 @@ spec:
       value: 'arilivigni'
   workspaces:
     - name: shared-workspace
-      persistentVolumeClaim:
-        claimName: pipelines-task-pvc
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 500Mi
 ```
 
 ### 04-app-sre-triggers.yaml
