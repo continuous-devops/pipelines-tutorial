@@ -54,8 +54,13 @@ spec:
         value: 'arilivigni'
       workspaces:
       - name: shared-workspace
-        persistentVolumeClaim:
-          claimName: pipelines-task-pvc
+        volumeClaimTemplate:
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 500M
 ---
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: Trigger

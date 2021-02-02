@@ -202,6 +202,14 @@ architecture with the following CRDs:
 - [`ClusterTriggerBinding`](https://github.com/tektoncd/triggers/blob/master/docs/clustertriggerbindings.md) - A cluster-scoped
   TriggerBinding
 
+#### Configuring a github webhook
+https://github.com/openshift/pipelines-tutorial/tree/release-tech-preview-3#configuring-github-webhooks
+
+To get the url for the __Payload URL__
+```
+oc  get route app-sre-github-listener-el --template='http://{{.spec.host}}'
+```
+
 
 ## References
 
@@ -210,9 +218,6 @@ The above examples are based on the OpenShift Pipelines Tutorial
 currently branch release-tech-preview-3 which corresponds 
 to the current OpenShift Pipelines operator
 https://github.com/openshift/pipelines-tutorial/tree/release-tech-preview-3
-
-### Configuring a github webhook
-https://github.com/openshift/pipelines-tutorial/tree/release-tech-preview-3#configuring-github-webhooks
 
 
 __Requirement:__ _A secret with the name regcreds 
