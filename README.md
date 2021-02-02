@@ -196,7 +196,7 @@ architecture with the following CRDs:
   payload fields 
   - ex. `app-sre-pipeline-trigger-binding`
 - [`Trigger`](https://github.com/tektoncd/triggers/blob/master/docs/triggers.md) - combines TriggerTemplate, TriggerBindings and interceptors. 
-  - ex. `app-sre-pipeline-trigger-binding`
+  - ex. `app-sre-pipeline-trigger`
 - [`EventListener`](https://github.com/tektoncd/triggers/blob/master/docs/eventlisteners.md)  - ex. `app-sre-github-listener-el`-  provides an
   [addressable](https://github.com/knative/eventing/blob/master/docs/spec/interfaces.md)
   endpoint (the event sink). `Trigger` - ex. `app-sre-pipeline-trigger`  is referenced inside the EventListener Spec. It uses the extracted event parameters from each
