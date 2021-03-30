@@ -1,0 +1,207 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-deploy
+spec:
+  workspaces:
+  - name: source
+    description: The image building will be done onto the volume backing this workspace
+  params:
+  - name: revId
+    description: The git revision cloned 
+    type: string
+    default: "master"
+  - name: contextDir
+    description: Path to dockerfile
+    type: string
+    default: .
+  - name: dockerFile
+    description: Dockerfile name
+    type: string
+    default: "Dockerfile"
+  - name: sslVerify
+    type: string
+    description: tls verify
+    default: "false"
+  - name: imageRegistry
+    type: string
+    description: Image registry to deploy images to
+    default: "image-registry.openshift-image-registry.svc:5000"
+  - name: imageName
+    type: string
+    description: Image name
+    default: ""
+  - name: nameSpace
+    type: string
+    description: Cluster namespace to use for pipelines
+    default: "hive-cicd"
+  - name: remoteRegistry
+    type: string
+    description: Remote registry to deploy image to
+    default: "quay.io"
+  - name: remoteOrg
+    type: string
+    description: Remote registry organization or user registry namespace
+    default: "arilivigni"
+  steps:
+  - name: build-deploy-image
+    env:
+    - name: REGISTRY_AUTH_FILE
+      value: /workspace/.docker/config.json
+    image: quay.io/buildah/stable
+    workingDir: $(workspaces.source.path)
+    script: |
+      #!/usr/bin/env bash
+      set -e -o pipefail
+
+      # set image names
+      export BASE_IMG=$(params.imageName)
+      export QUAY_IMG=$(params.remoteRegistry)/$(params.remoteOrg)/$BASE_IMG
+
+      # ssl verify setting
+      export SSL_VERIFY=$(params.sslVerify)
+      
+      # dockerfile path
+      export DOCKERFILE_CONTEXT_DIR=$(params.contextDir)/$(params.dockerFile)
+
+      # full and short git hash
+      export FULL_GIT_HASH=$(params.revId)
+      export GIT_HASH=$( echo "$FULL_GIT_HASH" | cut -c1-7 | tee $(workspaces.source.path)/SHA.txt )
+
+      echo "Base Image Name: $BASE_IMG"
+      echo "Quay Image Name: $QUAY_IMG"
+      echo "Git Full Hash: $FULL_GIT_HASH"
+      echo "Git Short Hash: $GIT_HASH"
+      echo "Dockerfile Path: $DOCKERFILE_CONTEXT_DIR"
+      echo "SSL verify: $SSL_VERIFY"
+
+      ./hack/app_sre_buildah_deploy.sh
+      
+      # build image
+      # buildah bud --tls-verify=$SSL_VERIFY \
+      # --layers \
+      # -f $DOCKERFILE_CONTEXT_DIR \
+      # -t $QUAY_IMG:$GIT_HASH .
+
+      # deploy image with to quay.io with git hash to image tag
+      # buildah push --tls-verify=$SSL_VERIFY \
+      # $QUAY_IMG:$GIT_HASH \
+      # $QUAY_IMG:$GIT_HASH
+
+      # deploy image to quay.io with latest tag
+      # buildah push --tls-verify=$SSL_VERIFY \
+      # $QUAY_IMG:$GIT_HASH \
+      # $QUAY_IMG:latest
+    securityContext:
+      privileged: true
+    volumeMounts:
+      - name: varlibcontainers
+        mountPath: /var/lib/containers
+      - name: docker-secret
+        mountPath: /workspace/.docker
+  volumes:
+  - name: varlibcontainers
+    emptyDir: {}
+  - name: docker-secret
+    secret:
+      secretName: regcreds
+      items:
+        - key: .dockerconfigjson
+          path: config.json
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: hive-build-deploy-pipeline
+spec:
+  description: |
+    Use clustertask git-clone, build image, deploy image
+  params:
+  - name: repo-url
+    type: string
+    description: The git repository URL to clone from.
+  - name: rev-id
+    description: The git revision
+    type: string
+    default: "master"
+  - name: context-dir
+    description: The relative path to the Dockerfile
+    type: string
+    default: "."
+  - name: docker-file
+    description: The name of the Dockerfile
+    type: string
+    default: "Dockerfile"
+  - name: tls-verify
+    type: string
+    description: tls verify
+    default: "false"
+  - name: image-registry
+    type: string
+    description: Image registry to deploy images to
+    default: "image-registry.openshift-image-registry.svc:5000"
+  - name: image-name
+    type: string
+    description: Image name
+    default: ""
+  - name: name-space
+    type: string
+    description: Cluster namespace to use for pipelines
+    default: ""
+  - name: remote-registry
+    type: string
+    description: Remote registry to deploy image to
+    default: ""
+  - name: remote-org
+    type: string
+    description: Remote registry organization or user registry namespace
+    default: ""
+  workspaces:
+  - name: shared-workspace
+    description: |
+      This workspace will receive the cloned git repo and be passed
+      to the next Task for verifying, building, and deploying files.
+  tasks:
+  - name: clone-repo
+    taskRef:
+      name: git-clone
+      kind: ClusterTask
+    workspaces:
+    - name: output
+      workspace: shared-workspace
+    params:
+    - name: url
+      value: $(params.repo-url)
+    - name: revision
+      value: $(params.rev-id)
+    - name: sslVerify
+      value: $(params.tls-verify)
+    - name: deleteExisting
+      value: "true"
+  - name: hive-build-deploy
+    runAfter: ["clone-repo"] # Wait until the clone-repo is complete
+    taskRef:
+      name: build-deploy
+    workspaces:
+    - name: source
+      workspace: shared-workspace
+    params:
+    - name: revId
+      value: $(params.rev-id)
+    - name: contextDir
+      value: $(params.context-dir)
+    - name: dockerFile
+      value: $(params.docker-file)
+    - name: sslVerify
+      value: $(params.tls-verify)
+    - name: imageRegistry
+      value: $(params.image-registry)
+    - name: imageName
+      value: $(params.image-name)
+    - name: nameSpace
+      value: $(params.name-space)
+    - name: remoteRegistry
+      value: $(params.remote-registry)
+    - name: remoteOrg
+      value: $(params.remote-org)

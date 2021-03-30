@@ -2,7 +2,7 @@
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: TriggerBinding
 metadata:
-  name: app-sre-pipeline-trigger-binding
+  name: hive-pipeline-trigger-binding
 spec:
   params:
   - name: git-repo-url
@@ -15,7 +15,7 @@ spec:
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: TriggerTemplate
 metadata:
-  name: app-sre-pipeline-trigger-template
+  name: hive-pipeline-trigger-template
 spec:
   params:
   - name: git-repo-url
@@ -30,24 +30,24 @@ spec:
   - apiVersion: tekton.dev/v1beta1
     kind: PipelineRun
     metadata:
-      generateName: app-sre-build-push-pipeline-
+      generateName: hive-build-deploy-pipeline-
     spec:
       serviceAccountName: pipeline
       pipelineRef:
-        name: app-sre-build-push-pipeline
+        name: hive-build-deploy-pipeline
       params:
       - name: repo-url
         value: $(tt.params.git-repo-url)
       - name: rev-id
         value: $(tt.params.git-revision)
       - name: context-dir
-        value: 'dockerfiles'
+        value: '.'
       - name: image-registry
         value: 'image-registry.openshift-image-registry.svc:5000'
       - name: image-name
         value: $(tt.params.git-repo-name)
       - name: name-space
-        value: 'app-sre-cicd'
+        value: 'hive-cicd'
       - name: remote-registry
         value: 'quay.io'
       - name: remote-org
@@ -60,41 +60,41 @@ spec:
               - ReadWriteOnce
             resources:
               requests:
-                storage: 500M
+                storage: 1Gi
 ---
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: Trigger
 metadata:
-  name: app-sre-pipeline-trigger
+  name: hive-pipeline-trigger
 spec:
   serviceAccountName: pipeline
   bindings:
-    - ref: app-sre-pipeline-trigger-binding
+    - ref: hive-pipeline-trigger-binding
   template:
-    name: app-sre-pipeline-trigger-template
+    name: hive-pipeline-trigger-template
 ---
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: EventListener
 metadata:
-  name: app-sre-github-listener-interceptor
+  name: hive-github-listener-interceptor
 spec:
   serviceAccountName: pipeline
   triggers:
   - name: github-listener
     bindings:
-      - ref: app-sre-pipeline-trigger-binding
+      - ref: hive-pipeline-trigger-binding
     template:
-      name: app-sre-pipeline-trigger-template
+      name: hive-pipeline-trigger-template
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   labels:
-    eventlistener:  app-sre-github-listener-interceptor
-  name: app-sre-github-listener-el
+    eventlistener:  hive-github-listener-interceptor
+  name: hive-github-listener-el
 spec:
   port:
     targetPort: http-listener
   to:
     kind: Service
-    name: el-app-sre-github-listener-interceptor
+    name: el-hive-github-listener-interceptor
