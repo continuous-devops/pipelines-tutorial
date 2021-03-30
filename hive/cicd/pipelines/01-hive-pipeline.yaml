@@ -26,7 +26,7 @@ spec:
     default: "false"
   - name: imageRegistry
     type: string
-    description: Image registry to push images to
+    description: Image registry to deploy images to
     default: "image-registry.openshift-image-registry.svc:5000"
   - name: imageName
     type: string
@@ -38,67 +38,61 @@ spec:
     default: "hive-cicd"
   - name: remoteRegistry
     type: string
-    description: Remote registry to push image to
+    description: Remote registry to deploy image to
     default: "quay.io"
   - name: remoteOrg
     type: string
     description: Remote registry organization or user registry namespace
     default: "arilivigni"
   steps:
-  - name: build-image
+  - name: build-deploy-image
+    env:
+    - name: REGISTRY_AUTH_FILE
+      value: /workspace/.docker/config.json
     image: quay.io/buildah/stable
     workingDir: $(workspaces.source.path)
     script: |
       #!/usr/bin/env bash
       set -e -o pipefail
 
-      # set image name
-      IMAGENAME=$(params.imageName)
-      FULLSHA=$(params.revId)
-      if [ "$IMAGENAME" == "" ]; then
-        IMAGENAME=$( cat $(params.contextDir)/$(params.dockerFile) | grep -m1 "name=" | cut -d '"' -f 2 )
-      fi
-      echo "$IMAGENAME" | tee $(workspaces.source.path)/IMAGENAME.txt
-      echo "$FULLSHA" | cut -c1-7 | tee $(workspaces.source.path)/SHA.txt
-      GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
+      # set image names
+      export BASE_IMG=$(params.imageName)
+      export QUAY_IMG=$(params.remoteRegistry)/$(params.remoteOrg)/$BASE_IMG
 
-      echo "Image Name: $IMAGENAME"
-      echo "Git SHA: $GITSHA"
+      # ssl verify setting
+      export SSL_VERIFY=$(params.sslVerify)
+      
+      # dockerfile path
+      export DOCKERFILE_CONTEXT_DIR=$(params.contextDir)/$(params.dockerFile)
 
+      # full and short git hash
+      export FULL_GIT_HASH=$(params.revId)
+      export GIT_HASH=$( echo "$FULL_GIT_HASH" | cut -c1-7 | tee $(workspaces.source.path)/SHA.txt )
+
+      echo "Base Image Name: $BASE_IMG"
+      echo "Quay Image Name: $QUAY_IMG"
+      echo "Git Full Hash: $FULL_GIT_HASH"
+      echo "Git Short Hash: $GIT_HASH"
+      echo "Dockerfile Path: $DOCKERFILE_CONTEXT_DIR"
+      echo "SSL verify: $SSL_VERIFY"
+
+      ./hack/app_sre_buildah_deploy.sh
+      
       # build image
-      buildah bud --tls-verify=$(params.sslVerify) \
-      --layers \
-      -f $(params.contextDir)/$(params.dockerFile) \
-      -t $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA .
-    securityContext:
-      privileged: true
-    volumeMounts:
-      - name: varlibcontainers
-        mountPath: /var/lib/containers
-  - name: deploy-image
-    env:
-    - name: REGISTRY_AUTH_FILE
-      value: /workspace/.docker/config.json
-    image: quay.io/buildah/stable
-    workingDir: $(workspaces.source.path)/$(params.contextDir)
-    script: |
-      #!/usr/bin/env bash
-      set -e -o pipefail
+      # buildah bud --tls-verify=$SSL_VERIFY \
+      # --layers \
+      # -f $DOCKERFILE_CONTEXT_DIR \
+      # -t $QUAY_IMG:$GIT_HASH .
 
-      IMAGENAME=$( cat $(workspaces.source.path)/IMAGENAME.txt )
-      GITSHA=$( cat $(workspaces.source.path)/SHA.txt )
-      echo "Image Name: $IMAGENAME"
-      echo "Git SHA: $GITSHA"
+      # deploy image with to quay.io with git hash to image tag
+      # buildah push --tls-verify=$SSL_VERIFY \
+      # $QUAY_IMG:$GIT_HASH \
+      # $QUAY_IMG:$GIT_HASH
 
-      # push image with with git SHA to git SHA tag
-      buildah push --tls-verify=$(params.sslVerify) \
-      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA \
-      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
-
-      # push image to latest tag
-      buildah push --tls-verify=$(params.sslVerify) \
-      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA \
-      $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
+      # deploy image to quay.io with latest tag
+      # buildah push --tls-verify=$SSL_VERIFY \
+      # $QUAY_IMG:$GIT_HASH \
+      # $QUAY_IMG:latest
     securityContext:
       privileged: true
     volumeMounts:
@@ -122,7 +116,7 @@ metadata:
   name: hive-build-deploy-pipeline
 spec:
   description: |
-    Use clustertask git-clone, build image, push image
+    Use clustertask git-clone, build image, deploy image
   params:
   - name: repo-url
     type: string
@@ -145,7 +139,7 @@ spec:
     default: "false"
   - name: image-registry
     type: string
-    description: Image registry to push images to
+    description: Image registry to deploy images to
     default: "image-registry.openshift-image-registry.svc:5000"
   - name: image-name
     type: string
@@ -157,7 +151,7 @@ spec:
     default: ""
   - name: remote-registry
     type: string
-    description: Remote registry to push image to
+    description: Remote registry to deploy image to
     default: ""
   - name: remote-org
     type: string
@@ -167,7 +161,7 @@ spec:
   - name: shared-workspace
     description: |
       This workspace will receive the cloned git repo and be passed
-      to the next Task for verifying, building, and pushing files.
+      to the next Task for verifying, building, and deploying files.
   tasks:
   - name: clone-repo
     taskRef:

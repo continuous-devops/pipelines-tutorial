@@ -60,7 +60,7 @@ spec:
               - ReadWriteOnce
             resources:
               requests:
-                storage: 20Gi
+                storage: 1Gi
 ---
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: Trigger

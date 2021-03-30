@@ -167,7 +167,7 @@ spec:
             - ReadWriteOnce
           resources:
             requests:
-              storage: 20Gi
+              storage: 1Gi
 ```
 
 ### 03-app-sre-triggers.yaml
