@@ -112,21 +112,7 @@ It clones the revision of the repo, builds the container, and pushes to quay.io.
 ### TO DO:
   - Check if image tag already exists and is the latest
   - Deploying a containerized app on OpenShift
-### 01-app-sre-storage.yaml
-```
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: pipelines-task-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 20Gi
-```
-### 02-app-sre-pipeline.yaml
+### 01-app-sre-pipeline.yaml
 
 This pipeline uses OpenShift Pipelines `clone-repo` ClusterTask 
 to clone a repository based on git revision.  
@@ -143,10 +129,10 @@ Custom tasks: `build-image` and `build-push`
       * Push to remote registry/organization:latest
 * Workspaces - shared-task-storage --> shared-workspace --> pipelines-task-pvc
 
-### 03-app-sre-pr.yaml
+### 02-app-sre-pr.yaml
 
 This can be used to run the pipeline manually, but to be fully automated
-we recommend using the trigger below `04-app-sre-triggers.yaml`
+we recommend using the trigger below `03-app-sre-triggers.yaml`
 ```
 ---
 apiVersion: tekton.dev/v1beta1
@@ -181,10 +167,10 @@ spec:
             - ReadWriteOnce
           resources:
             requests:
-              storage: 500Mi
+              storage: 20Gi
 ```
 
-### 04-app-sre-triggers.yaml
+### 03-app-sre-triggers.yaml
 
 Triggers extends the Tekton
 architecture with the following CRDs:

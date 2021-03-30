@@ -2,23 +2,23 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: app-sre-build-push-pipeline-
+  generateName: hive-build-deploy-pipeline-
 spec:
   pipelineRef:
-    name: app-sre-build-push-pipeline
+    name: hive-build-deploy-pipeline
   params:
     - name: repo-url
-      value: 'https://github.com/arilivigni/qontract-reconcile.git'
+      value: 'https://github.com/arilivigni/hive.git'
     - name: rev-id
-      value: '1a3e5f3d69e08bc5e74b5b341dcc4bceec69880d'
+      value: 'tekton'
     - name: context-dir
-      value: 'dockerfiles'
+      value: '.'
     - name: image-registry
       value: 'image-registry.openshift-image-registry.svc:5000'
     - name: image-name
-      value: 'qontract-reconcile'
+      value: 'hive'
     - name: name-space
-      value: 'app-sre-cicd'
+      value: 'hive-cicd'
     - name: remote-registry
       value: 'quay.io'
     - name: remote-org
@@ -31,4 +31,4 @@ spec:
             - ReadWriteOnce
           resources:
             requests:
-              storage: 500Mi
+              storage: 20Gi
