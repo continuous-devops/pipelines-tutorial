@@ -6,7 +6,7 @@ so mileage may vary when running on a generic Kubernetes cluster.
 ## clone-build-push example
 
 ### 01-clone-build-push-storage.yaml
-```
+```yaml
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -71,7 +71,7 @@ There is a check to see files in the workspace.
 This is a pipeline run that starts the running of the pipeline above.
 Parameters in the pipeline are filled in by the pipeline run.
 
-```
+```yaml
 ---
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
@@ -133,7 +133,7 @@ Custom tasks: `build-image` and `build-push`
 
 This can be used to run the pipeline manually, but to be fully automated
 we recommend using the trigger below `03-app-sre-triggers.yaml`
-```
+```yaml
 ---
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
@@ -196,7 +196,7 @@ architecture with the following CRDs:
 https://github.com/openshift/pipelines-tutorial/tree/release-tech-preview-3#configuring-github-webhooks
 
 To get the url for the __Payload URL__
-```
+```sh
 oc  get route app-sre-github-listener-el --template='http://{{.spec.host}}'
 ```
 
