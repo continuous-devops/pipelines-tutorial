@@ -15,7 +15,7 @@ spec:
   - name: contextDir
     description: Path to dockerfile
     type: string
-    default: .
+    default: ./dist
   - name: dockerFile
     description: Dockerfile name
     type: string
@@ -35,7 +35,7 @@ spec:
   - name: nameSpace
     type: string
     description: Cluster namespace to use for pipelines
-    default: "hive-cicd"
+    default: "cincinnati-cicd"
   - name: remoteRegistry
     type: string
     description: Remote registry to deploy image to
@@ -76,7 +76,7 @@ spec:
       echo "Dockerfile Path: $DOCKERFILE_CONTEXT_DIR"
       echo "SSL verify: $SSL_VERIFY"
 
-      ./hack/app_sre_buildah_deploy.sh
+      ./dist/app_sre_buildah_deploy.sh
     securityContext:
       privileged: true
     volumeMounts:
@@ -97,7 +97,7 @@ spec:
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: hive-build-deploy-pipeline
+  name: cincinnati-build-deploy-pipeline
 spec:
   description: |
     Use clustertask git-clone, build image, deploy image
@@ -163,7 +163,7 @@ spec:
       value: $(params.tls-verify)
     - name: deleteExisting
       value: "true"
-  - name: hive-build-deploy
+  - name: cincinnati-build-deploy
     runAfter: ["clone-repo"] # Wait until the clone-repo is complete
     taskRef:
       name: build-deploy
