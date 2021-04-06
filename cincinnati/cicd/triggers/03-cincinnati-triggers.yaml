@@ -46,8 +46,6 @@ spec:
         value: 'image-registry.openshift-image-registry.svc:5000'
       - name: image-name
         value: $(tt.params.git-repo-name)
-      - name: name-space
-        value: 'cincinnati-cicd'
       - name: remote-registry
         value: 'quay.io'
       - name: remote-org

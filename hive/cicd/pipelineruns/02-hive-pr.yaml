@@ -17,8 +17,6 @@ spec:
       value: 'image-registry.openshift-image-registry.svc:5000'
     - name: image-name
       value: 'hive'
-    - name: name-space
-      value: 'hive-cicd'
     - name: remote-registry
       value: 'quay.io'
     - name: remote-org
