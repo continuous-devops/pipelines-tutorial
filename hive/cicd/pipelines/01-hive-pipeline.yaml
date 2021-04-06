@@ -32,10 +32,6 @@ spec:
     type: string
     description: Image name
     default: ""
-  - name: nameSpace
-    type: string
-    description: Cluster namespace to use for pipelines
-    default: "hive-cicd"
   - name: remoteRegistry
     type: string
     description: Remote registry to deploy image to
@@ -129,10 +125,6 @@ spec:
     type: string
     description: Image name
     default: ""
-  - name: name-space
-    type: string
-    description: Cluster namespace to use for pipelines
-    default: ""
   - name: remote-registry
     type: string
     description: Remote registry to deploy image to
@@ -183,8 +175,6 @@ spec:
       value: $(params.image-registry)
     - name: imageName
       value: $(params.image-name)
-    - name: nameSpace
-      value: $(params.name-space)
     - name: remoteRegistry
       value: $(params.remote-registry)
     - name: remoteOrg
