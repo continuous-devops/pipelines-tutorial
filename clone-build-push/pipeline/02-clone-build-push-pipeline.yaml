@@ -95,16 +95,14 @@ spec:
           echo "Image Stream SHA: $ISTAG"
 
           # build image
-          buildah bud --tls-verify=$(params.sslVerify) \
+          buildah bud --storage-driver=vfs \ 
+          --tls-verify=$(params.sslVerify) \
           --layers \
           -f $(params.dockerFile) \
           -t $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA .
         else
           echo "Local image registry contains the image stream tag...nothing to do"
         fi
-
-      securityContext:
-        privileged: true
       volumeMounts:
         - name: varlibcontainers
           mountPath: /var/lib/containers
@@ -127,14 +125,13 @@ spec:
           echo "Image Stream SHA: $ISTAG"
 
           # push image with with git SHA
-          buildah push --tls-verify=$(params.sslVerify) \
+          buildah push --storage-driver=vfs \ 
+          --tls-verify=$(params.sslVerify) \
           $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
           docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
         else
           echo "Local image registry contains the image stream tag...nothing to do"
         fi
-      securityContext:
-        privileged: true
       volumeMounts:
         - name: varlibcontainers
           mountPath: /var/lib/containers
@@ -184,7 +181,8 @@ spec:
           echo "Image Stream SHA: $ISTAG"
 
           # pull down the local image we built and tagged
-          buildah pull --tls-verify=$(params.sslVerify) \
+          buildah pull --storage-driver=vfs \ 
+          --tls-verify=$(params.sslVerify) \
           docker://$(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA
 
           # push to remote registry and organization with GITSHA tag
@@ -193,7 +191,8 @@ spec:
           $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA"
           echo ""
 
-          buildah push --tls-verify=$(params.sslVerify) \
+          buildah push --storage-driver=vfs \ 
+          --tls-verify=$(params.sslVerify) \
           $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
           $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
 
@@ -203,7 +202,8 @@ spec:
           $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest"
           echo ""
 
-          buildah push --tls-verify=$(params.sslVerify) \
+          buildah push --storage-driver=vfs \ 
+          --tls-verify=$(params.sslVerify) \
           $(params.imageRegistry)/$(params.nameSpace)/$IMAGENAME:$GITSHA \
           $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
         else

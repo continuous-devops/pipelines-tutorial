@@ -3,6 +3,20 @@ A repository that walks through tektoncd/OpenShift pipeline examples.
 All of these examples were run against OpenShift 4.x clusters 
 so mileage may vary when running on a generic Kubernetes cluster.
 
+###  OpenShift Pipelines Operator (Tekton) Install
+
+![OperatorHub](./assets/op1.png "OperatorHub")
+
+![OpenShift Pipelines Install](./assets/op2.png "OpenShift Pipelines Install")
+
+![Install Operator](./assets/op3.png "Install Operator")
+
+#### Post operator installation
+Once the Operator is installed you need to run the following command for the pipeline service account
+
+```sh
+oc adm policy add-scc-to-user -n <project-namespace> anyuid -z pipeline
+```
 ## clone-build-push example
 
 ### 01-clone-build-push-storage.yaml
@@ -199,8 +213,6 @@ To get the url for the __Payload URL__
 ```sh
 oc  get route app-sre-github-listener-el --template='http://{{.spec.host}}'
 ```
-
-
 ## References
 
 ### OpenShift Pipelines Tutorial

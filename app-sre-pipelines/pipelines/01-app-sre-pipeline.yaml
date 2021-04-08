@@ -62,12 +62,11 @@ spec:
       echo "Git SHA: $GITSHA"
 
       # build image
-      buildah bud --tls-verify=$(params.sslVerify) \
+      buildah bud --storage-driver=vfs \ 
+      --tls-verify=$(params.sslVerify) \
       --layers \
       -f $(params.contextDir)/$(params.dockerFile) \
       -t $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA .
-    securityContext:
-      privileged: true
     volumeMounts:
       - name: varlibcontainers
         mountPath: /var/lib/containers
@@ -87,16 +86,16 @@ spec:
       echo "Git SHA: $GITSHA"
 
       # push image with with git SHA to git SHA tag
-      buildah push --tls-verify=$(params.sslVerify) \
+      buildah push --storage-driver=vfs \
+      --tls-verify=$(params.sslVerify) \
       $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA \
       $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA
 
       # push image to latest tag
-      buildah push --tls-verify=$(params.sslVerify) \
+      buildah push --storage-driver=vfs \
+      --tls-verify=$(params.sslVerify) \
       $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:$GITSHA \
       $(params.remoteRegistry)/$(params.remoteOrg)/$IMAGENAME:latest
-    securityContext:
-      privileged: true
     volumeMounts:
       - name: varlibcontainers
         mountPath: /var/lib/containers
