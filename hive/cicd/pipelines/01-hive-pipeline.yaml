@@ -73,8 +73,6 @@ spec:
       echo "SSL verify: $SSL_VERIFY"
 
       ./hack/app_sre_buildah_deploy.sh
-    securityContext:
-      privileged: true
     volumeMounts:
       - name: varlibcontainers
         mountPath: /var/lib/containers
